@@ -6,7 +6,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 10080  # 7 dias (público)
+    timeout-minutes: 10080
 
     steps:
       - name: Instalar AnyDesk
@@ -17,15 +17,21 @@ jobs:
         shell: cmd
         run: |
           net start AnyDesk
-          ping -n 6 127.0.0.1 >nul
-          echo Definindo senha de acesso autônomo...
-          "C:\Program Files (x86)\AnyDesk\AnyDesk.exe" --set-password wrick2532@R2Lr
+          ping -n 11 127.0.0.1 >nul
+          echo Configurando senha autônoma...
+          "C:\Program Files (x86)\AnyDesk\AnyDesk.exe" --set-password Abacaxi!2024
+          if %errorlevel% equ 0 (
+            echo Senha configurada com sucesso!
+          ) else (
+            echo ERRO ao definir senha. Código: %errorlevel%
+          )
           ping -n 6 127.0.0.1 >nul
           echo Obtendo ID...
           "C:\Program Files (x86)\AnyDesk\AnyDesk.exe" --get-id > %TEMP%\id.txt 2>&1
           set /p ID=<%TEMP%\id.txt
           echo =========================================
           echo ID DO ANYDESK: %ID%
+          echo SENHA AUTÔNOMA: Abacaxi!2024
           echo =========================================
 
       - name: Manter Sessão Ativa
