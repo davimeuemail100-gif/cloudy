@@ -9,74 +9,47 @@ jobs:
     timeout-minutes: 10080  # 7 dias (público)
 
     steps:
-      - name: Instalar AnyDesk
-        shell: pwsh
+      - name: Instalar e Configurar AnyDesk como Serviço
+        shell: cmd
         run: |
           choco install anydesk -y --ignore-checksums
-          # Verifica se o executável existe
-          if (Test-Path "C:\Program Files (x86)\AnyDesk\AnyDesk.exe") {
-            Write-Host "AnyDesk instalado com sucesso."
-          } elseif (Test-Path "C:\Program Files\AnyDesk\AnyDesk.exe") {
-            Write-Host "AnyDesk instalado em Program Files (64-bit)."
-          } else {
-            Write-Host "ERRO: AnyDesk.exe não encontrado!"
-            exit 1
-          }
+          "C:\Program Files (x86)\AnyDesk\AnyDesk.exe" --install "C:\Program Files (x86)\AnyDesk\AnyDesk.exe" --start-with-win --silent
+          net start AnyDesk || echo Serviço não iniciou, tentando forçar...
+          sc config AnyDesk start= auto
+          net start AnyDesk
+          timeout /t 10 /nobreak >nul
 
-      - name: Iniciar AnyDesk
-        shell: pwsh
+      - name: Obter ID do AnyDesk
+        shell: cmd
         run: |
-          $anydeskPath = if (Test-Path "C:\Program Files (x86)\AnyDesk\AnyDesk.exe") {
-            "C:\Program Files (x86)\AnyDesk\AnyDesk.exe"
-          } else {
-            "C:\Program Files\AnyDesk\AnyDesk.exe"
-          }
-          Start-Process -FilePath $anydeskPath -ArgumentList "--start-with-win --silent" -WindowStyle Hidden
-          Write-Host "AnyDesk iniciado."
-
-      - name: Aguardar inicialização e obter ID
-        shell: pwsh
-        run: |
-          # Aguarda até 60 segundos pelo AnyDesk ficar pronto
-          $maxAttempts = 12
-          $attempt = 0
-          $id = $null
-          do {
-            $attempt++
-            Start-Sleep -Seconds 5
-            # Tenta obter o ID pelo registro (mais confiável)
-            try {
-              $regPath = "HKLM:\SOFTWARE\WOW6432Node\AnyDesk\Client"  # 64-bit
-              if (-not (Test-Path $regPath)) {
-                $regPath = "HKLM:\SOFTWARE\AnyDesk\Client"  # fallback 32-bit
-              }
-              $id = (Get-ItemProperty -Path $regPath -Name "AD_Id" -ErrorAction Stop).AD_Id
-              if ($id) { break }
-            } catch {
-              # Segunda tentativa via linha de comando
-              $anydeskPath = if (Test-Path "C:\Program Files (x86)\AnyDesk\AnyDesk.exe") {
-                "C:\Program Files (x86)\AnyDesk\AnyDesk.exe"
-              } else {
-                "C:\Program Files\AnyDesk\AnyDesk.exe"
-              }
-              $id = & $anydeskPath --get-id 2>$null
-              if ($id) { break }
-            }
-            Write-Host "Tentativa $attempt - AnyDesk ainda não pronto..."
-          } while ($attempt -lt $maxAttempts)
-
-          if ($id) {
-            Write-Host "ID DO ANYDESK: $id"
-            echo "anydesk_id=$id" >> $env:GITHUB_OUTPUT
-          } else {
-            Write-Host "ERRO: Não foi possível obter o ID do AnyDesk."
-            exit 1
-          }
+          setlocal enabledelayedexpansion
+          set tentativas=0
+          :loop
+          set /a tentativas+=1
+          echo Tentativa !tentativas! de obter ID...
+          "C:\Program Files (x86)\AnyDesk\AnyDesk.exe" --get-id > %TEMP%\anydesk_id.txt 2>&1
+          type %TEMP%\anydesk_id.txt
+          findstr /r "^[0-9]*$" %TEMP%\anydesk_id.txt >nul
+          if %errorlevel% equ 0 (
+            for /f %%i in (%TEMP%\anydesk_id.txt) do echo ID DO ANYDESK: %%i
+            goto :continue
+          )
+          if !tentativas! lss 12 (
+            timeout /t 10 /nobreak >nul
+            goto :loop
+          )
+          echo ERRO: Não foi possível obter o ID após várias tentativas.
+          echo Diagnóstico:
+          tasklist | findstr AnyDesk
+          sc query AnyDesk
+          dir "C:\Program Files (x86)\AnyDesk"
+          exit /b 1
+          :continue
 
       - name: Manter Sessão Ativa
-        shell: pwsh
+        shell: cmd
         run: |
-          while ($true) {
-            Write-Host "Keep alive - $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
-            Start-Sleep -Seconds 60
-          }
+          :keep_alive
+          echo Keep alive - %date% %time%
+          timeout /t 60 /nobreak >nul
+          goto keep_alive
