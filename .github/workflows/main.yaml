@@ -6,37 +6,24 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 10080  # 7 dias (público)
+    timeout-minutes: 10080
 
     steps:
       - name: Instalar AnyDesk
         shell: cmd
         run: choco install anydesk -y --ignore-checksums
 
-      - name: Iniciar AnyDesk e obter ID
-        shell: pwsh
+      - name: Iniciar serviço e obter ID
+        shell: cmd
         run: |
-          # Garante que o serviço está rodando
-          Start-Service -Name AnyDesk -ErrorAction SilentlyContinue
-          
-          # Aguarda o serviço estabilizar
-          $retry = 0
-          do {
-            Start-Sleep -Seconds 5
-            $id = & "C:\Program Files (x86)\AnyDesk\AnyDesk.exe" --get-id 2>$null
-            $retry++
-          } while (-not $id -and $retry -lt 10)
-          
-          if ($id) {
-            Write-Host "========================================="
-            Write-Host "ID DO ANYDESK: $id"
-            Write-Host "========================================="
-            # Salva para possível uso futuro
-            $id | Out-File -FilePath anydesk_id.txt
-          } else {
-            Write-Host "ERRO: Não foi possível obter o ID após várias tentativas."
-            exit 1
-          }
+          echo Iniciando serviço AnyDesk...
+          net start AnyDesk
+          echo Aguardando 10 segundos...
+          ping -n 11 127.0.0.1 >nul
+          echo Obtendo ID...
+          "C:\Program Files (x86)\AnyDesk\AnyDesk.exe" --get-id > %TEMP%\id.txt 2>&1
+          set /p ID=<%TEMP%\id.txt
+          echo ID DO ANYDESK: %ID%
 
       - name: Manter Sessão Ativa
         shell: cmd
