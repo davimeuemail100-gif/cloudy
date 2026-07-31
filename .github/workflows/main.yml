@@ -9,47 +9,53 @@ jobs:
     timeout-minutes: 10080  # 7 dias (público)
 
     steps:
-      - name: Instalar e Configurar AnyDesk como Serviço
+      - name: Instalar e Iniciar AnyDesk
         shell: cmd
         run: |
           choco install anydesk -y --ignore-checksums
-          "C:\Program Files (x86)\AnyDesk\AnyDesk.exe" --install "C:\Program Files (x86)\AnyDesk\AnyDesk.exe" --start-with-win --silent
-          net start AnyDesk || echo Serviço não iniciou, tentando forçar...
-          sc config AnyDesk start= auto
-          net start AnyDesk
-          timeout /t 10 /nobreak >nul
+          echo Verificando serviço...
+          sc query AnyDesk | find "RUNNING"
+          if %errorlevel% neq 0 (
+            echo Iniciando serviço...
+            net start AnyDesk
+          )
+          echo Aguardando inicialização (15 segundos)...
+          ping -n 15 127.0.0.1 >nul
 
       - name: Obter ID do AnyDesk
         shell: cmd
         run: |
           setlocal enabledelayedexpansion
-          set tentativas=0
+          set "tentativas=0"
+          set "ID="
           :loop
           set /a tentativas+=1
-          echo Tentativa !tentativas! de obter ID...
-          "C:\Program Files (x86)\AnyDesk\AnyDesk.exe" --get-id > %TEMP%\anydesk_id.txt 2>&1
-          type %TEMP%\anydesk_id.txt
-          findstr /r "^[0-9]*$" %TEMP%\anydesk_id.txt >nul
-          if %errorlevel% equ 0 (
-            for /f %%i in (%TEMP%\anydesk_id.txt) do echo ID DO ANYDESK: %%i
+          echo Tentativa !tentativas!...
+          for /f "delims=" %%i in ('"C:\Program Files (x86)\AnyDesk\AnyDesk.exe" --get-id 2^>^&1') do set "ID=%%i"
+          echo Saída: !ID!
+          echo !ID! | findstr /r "^[0-9]*$" >nul
+          if not errorlevel 1 (
+            echo.
+            echo ========================================
+            echo ID DO ANYDESK: !ID!
+            echo ========================================
             goto :continue
           )
           if !tentativas! lss 12 (
-            timeout /t 10 /nobreak >nul
+            ping -n 6 127.0.0.1 >nul
             goto :loop
           )
-          echo ERRO: Não foi possível obter o ID após várias tentativas.
-          echo Diagnóstico:
+          echo ERRO: Não foi possível obter o ID após 12 tentativas.
           tasklist | findstr AnyDesk
           sc query AnyDesk
-          dir "C:\Program Files (x86)\AnyDesk"
           exit /b 1
           :continue
+          echo !ID! > anydesk_id.txt
 
       - name: Manter Sessão Ativa
         shell: cmd
         run: |
           :keep_alive
           echo Keep alive - %date% %time%
-          timeout /t 60 /nobreak >nul
+          ping -n 61 127.0.0.1 >nul
           goto keep_alive
