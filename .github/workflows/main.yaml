@@ -6,7 +6,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 10080
+    timeout-minutes: 10080  # 7 dias (público)
 
     steps:
       - name: Instalar AnyDesk
@@ -18,20 +18,23 @@ jobs:
         run: |
           net start AnyDesk
           ping -n 11 127.0.0.1 >nul
-          echo Configurando senha autônoma...
-          "C:\Program Files (x86)\AnyDesk\AnyDesk.exe" --set-password Abacaxi!2024
-          if %errorlevel% equ 0 (
-            echo Senha configurada com sucesso!
-          ) else (
-            echo ERRO ao definir senha. Código: %errorlevel%
-          )
-          ping -n 6 127.0.0.1 >nul
+
+          echo Criando arquivo de configuração para senha autônoma...
+          mkdir "C:\ProgramData\AnyDesk" 2>nul
+          echo password=Abacaxi2024 > "C:\ProgramData\AnyDesk\service.conf"
+
+          echo Reiniciando serviço para aplicar configuração...
+          net stop AnyDesk
+          ping -n 5 127.0.0.1 >nul
+          net start AnyDesk
+          ping -n 10 127.0.0.1 >nul
+
           echo Obtendo ID...
           "C:\Program Files (x86)\AnyDesk\AnyDesk.exe" --get-id > %TEMP%\id.txt 2>&1
           set /p ID=<%TEMP%\id.txt
           echo =========================================
           echo ID DO ANYDESK: %ID%
-          echo SENHA AUTÔNOMA: Abacaxi!2024
+          echo SENHA AUTÔNOMA: Abacaxi2024
           echo =========================================
 
       - name: Manter Sessão Ativa
