@@ -1,0 +1,47 @@
+name: Windows Cloud PC - Anydesk
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 10080  # 7 dias (público)
+
+    steps:
+      - name: Instalar AnyDesk
+        shell: cmd
+        run: choco install anydesk -y --ignore-checksums
+
+      - name: Iniciar AnyDesk e obter ID
+        shell: pwsh
+        run: |
+          # Garante que o serviço está rodando
+          Start-Service -Name AnyDesk -ErrorAction SilentlyContinue
+          
+          # Aguarda o serviço estabilizar
+          $retry = 0
+          do {
+            Start-Sleep -Seconds 5
+            $id = & "C:\Program Files (x86)\AnyDesk\AnyDesk.exe" --get-id 2>$null
+            $retry++
+          } while (-not $id -and $retry -lt 10)
+          
+          if ($id) {
+            Write-Host "========================================="
+            Write-Host "ID DO ANYDESK: $id"
+            Write-Host "========================================="
+            # Salva para possível uso futuro
+            $id | Out-File -FilePath anydesk_id.txt
+          } else {
+            Write-Host "ERRO: Não foi possível obter o ID após várias tentativas."
+            exit 1
+          }
+
+      - name: Manter Sessão Ativa
+        shell: cmd
+        run: |
+          :keep_alive
+          echo Keep alive - %date% %time%
+          ping -n 61 127.0.0.1 >nul
+          goto keep_alive
