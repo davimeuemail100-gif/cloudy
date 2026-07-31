@@ -11,19 +11,67 @@ jobs:
     steps:
       - name: Instalar AnyDesk
         shell: pwsh
-        run: choco install anydesk -y --ignore-checksums
+        run: |
+          choco install anydesk -y --ignore-checksums
+          # Verifica se o executável existe
+          if (Test-Path "C:\Program Files (x86)\AnyDesk\AnyDesk.exe") {
+            Write-Host "AnyDesk instalado com sucesso."
+          } elseif (Test-Path "C:\Program Files\AnyDesk\AnyDesk.exe") {
+            Write-Host "AnyDesk instalado em Program Files (64-bit)."
+          } else {
+            Write-Host "ERRO: AnyDesk.exe não encontrado!"
+            exit 1
+          }
 
       - name: Iniciar AnyDesk
         shell: pwsh
-        run: Start-Process "C:\Program Files (x86)\AnyDesk\AnyDesk.exe" -ArgumentList "--start-with-win --silent" -WindowStyle Hidden
+        run: |
+          $anydeskPath = if (Test-Path "C:\Program Files (x86)\AnyDesk\AnyDesk.exe") {
+            "C:\Program Files (x86)\AnyDesk\AnyDesk.exe"
+          } else {
+            "C:\Program Files\AnyDesk\AnyDesk.exe"
+          }
+          Start-Process -FilePath $anydeskPath -ArgumentList "--start-with-win --silent" -WindowStyle Hidden
+          Write-Host "AnyDesk iniciado."
 
-      - name: Exibir ID do AnyDesk
+      - name: Aguardar inicialização e obter ID
         shell: pwsh
         run: |
-          Start-Sleep -Seconds 10
-          $id = & "C:\Program Files (x86)\AnyDesk\AnyDesk.exe" --get-id
-          Write-Host "ID DO ANYDESK: $id"
-          echo "anydesk_id=$id" >> $env:GITHUB_OUTPUT
+          # Aguarda até 60 segundos pelo AnyDesk ficar pronto
+          $maxAttempts = 12
+          $attempt = 0
+          $id = $null
+          do {
+            $attempt++
+            Start-Sleep -Seconds 5
+            # Tenta obter o ID pelo registro (mais confiável)
+            try {
+              $regPath = "HKLM:\SOFTWARE\WOW6432Node\AnyDesk\Client"  # 64-bit
+              if (-not (Test-Path $regPath)) {
+                $regPath = "HKLM:\SOFTWARE\AnyDesk\Client"  # fallback 32-bit
+              }
+              $id = (Get-ItemProperty -Path $regPath -Name "AD_Id" -ErrorAction Stop).AD_Id
+              if ($id) { break }
+            } catch {
+              # Segunda tentativa via linha de comando
+              $anydeskPath = if (Test-Path "C:\Program Files (x86)\AnyDesk\AnyDesk.exe") {
+                "C:\Program Files (x86)\AnyDesk\AnyDesk.exe"
+              } else {
+                "C:\Program Files\AnyDesk\AnyDesk.exe"
+              }
+              $id = & $anydeskPath --get-id 2>$null
+              if ($id) { break }
+            }
+            Write-Host "Tentativa $attempt - AnyDesk ainda não pronto..."
+          } while ($attempt -lt $maxAttempts)
+
+          if ($id) {
+            Write-Host "ID DO ANYDESK: $id"
+            echo "anydesk_id=$id" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "ERRO: Não foi possível obter o ID do AnyDesk."
+            exit 1
+          }
 
       - name: Manter Sessão Ativa
         shell: pwsh
