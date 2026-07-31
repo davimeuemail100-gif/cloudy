@@ -6,24 +6,27 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 10080
+    timeout-minutes: 10080  # 7 dias (público)
 
     steps:
       - name: Instalar AnyDesk
         shell: cmd
         run: choco install anydesk -y --ignore-checksums
 
-      - name: Iniciar serviço e obter ID
+      - name: Configurar acesso autônomo e obter ID
         shell: cmd
         run: |
-          echo Iniciando serviço AnyDesk...
           net start AnyDesk
-          echo Aguardando 10 segundos...
-          ping -n 11 127.0.0.1 >nul
+          ping -n 6 127.0.0.1 >nul
+          echo Definindo senha de acesso autônomo...
+          "C:\Program Files (x86)\AnyDesk\AnyDesk.exe" --set-password wrick2532@R2Lr
+          ping -n 6 127.0.0.1 >nul
           echo Obtendo ID...
           "C:\Program Files (x86)\AnyDesk\AnyDesk.exe" --get-id > %TEMP%\id.txt 2>&1
           set /p ID=<%TEMP%\id.txt
+          echo =========================================
           echo ID DO ANYDESK: %ID%
+          echo =========================================
 
       - name: Manter Sessão Ativa
         shell: cmd
